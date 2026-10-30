@@ -1,5 +1,3 @@
-# mini-aktoria
-Simulated remote robot operation with human takeover and intervention logging
 # Mini Aktoria
 
 A small-scale simulation of **remote robot operation with human takeover**.

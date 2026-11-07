@@ -5,7 +5,8 @@ class WheeledRobot(RobotAdapter):
     def __init__(self):
         self.x, self.y, self.theta = 0.0, 0.0, 0.0
         self.v, self.w = 0.0, 0.0
-        self.wall_x = 5.0  # wall at x=5, robot cannot pass
+        self.wall_x = 5.0
+        self.wall_half = 1.0  # wall blocks y from -1 to 1
 
     def get_state(self):
         return {"x": self.x, "y": self.y, "theta": self.theta}
@@ -18,5 +19,7 @@ class WheeledRobot(RobotAdapter):
         self.theta += self.w * dt
         nx = self.x + self.v * math.cos(self.theta) * dt
         ny = self.y + self.v * math.sin(self.theta) * dt
-        if nx < self.wall_x:  # only move if not hitting the wall
-            self.x, self.y = nx, ny
+        crosses = (self.x < self.wall_x <= nx) or (nx < self.wall_x <= self.x)
+        if crosses and abs(ny) < self.wall_half:
+            return  # hit the wall, do not move
+        self.x, self.y = nx, ny

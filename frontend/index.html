@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Mini Aktoria</title></head>
+<body style="font-family:sans-serif">
+<h2>Mini Aktoria - Operator Console</h2>
+<div id="status" style="font-size:20px;margin-bottom:8px">Connecting...</div>
+<button id="take">Take over</button>
+<button id="back">Hand back</button>
+<p>Arrow keys: up/down = forward/back, left/right = turn</p>
+<canvas id="c" width="600" height="200" style="border:1px solid #000"></canvas>
+<script>
+const ctx = document.getElementById("c").getContext("2d");
+const status = document.getElementById("status");
+const S = 50;
+const ws = new WebSocket("ws://" + location.host + "/ws");
+let mode = "auto";
+const keys = {};
+
+document.getElementById("take").onclick = () => ws.send(JSON.stringify({type: "takeover"}));
+document.getElementById("back").onclick = () => ws.send(JSON.stringify({type: "handback"}));
+document.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key.startsWith("Arrow")) e.preventDefault();
+});
+document.addEventListener("keyup", e => { keys[e.key] = false; });
+
+setInterval(() => {
+  if (mode !== "manual") return;
+  const v = keys["ArrowUp"] ? 1.5 : keys["ArrowDown"] ? -1.5 : 0;
+  const w = keys["ArrowLeft"] ? 1.5 : keys["ArrowRight"] ? -1.5 : 0;
+  ws.send(JSON.stringify({type: "cmd", v: v, w: w}));
+}, 50);
+
+const COLORS = {auto: "blue", stuck: "red", manual: "orange", done: "green"};
+const TEXT = {
+  auto: "Driving by itself",
+  stuck: "HELP NEEDED - press Take over",
+  manual: "You are in control (arrow keys)",
+  done: "Goal reached"
+};
+
+ws.onmessage = (e) => {
+  const s = JSON.parse(e.data);
+  mode = s.mode;
+  ctx.clearRect(0, 0, 600, 200);
+  ctx.fillStyle = "black";
+  ctx.fillRect(5 * S + 10, 50, 4, 100);        // wall with gaps above and below
+  ctx.fillStyle = "green";
+  ctx.fillRect(10 * S + 5, 95, 10, 10);        // goal
+  const px = s.x * S + 10, py = 100 - s.y * S;
+  ctx.fillStyle = COLORS[mode];
+  ctx.beginPath();
+  ctx.arc(px, py, 10, 0, 2 * Math.PI);
+  ctx.fill();                                   // robot
+  ctx.strokeStyle = "black";
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + 14 * Math.cos(s.theta), py - 14 * Math.sin(s.theta));
+  ctx.stroke();                                 // heading line
+  status.textContent = TEXT[mode];
+};
+</script>
+</body>
+</html>

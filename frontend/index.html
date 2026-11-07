@@ -3,21 +3,109 @@
 <head><meta charset="utf-8"><title>Mini Aktoria</title></head>
 <body style="font-family:sans-serif">
 <h2>Mini Aktoria - Operator Console</h2>
-<div id="status" style="font-size:20px;margin-bottom:8px">Connecting...</div>
-<button id="take">Take over</button>
-<button id="back">Hand back</button>
-<p>Arrow keys: up/down = forward/back, left/right = turn</p>
-<canvas id="c" width="600" height="200" style="border:1px solid #000"></canvas>
+<div style="display:flex;gap:30px;flex-wrap:wrap">
+  <div id="fleet"></div>
+  <div style="min-width:300px">
+    <h3>Help queue</h3>
+    <div id="queue">Empty</div>
+    <h3>In control</h3>
+    <div id="ctl">Nobody</div>
+    <p>
+      <button id="back" disabled>Hand back</button>
+      <button id="reset">Restart demo</button>
+    </p>
+    <p>Arrow keys: up/down = forward/back, left/right = turn</p>
+  </div>
+</div>
 <script>
-const ctx = document.getElementById("c").getContext("2d");
-const status = document.getElementById("status");
-const S = 50;
+const S = 40;
 const ws = new WebSocket("ws://" + location.host + "/ws");
-let mode = "auto";
+const COLORS = {auto: "blue", stuck: "red", manual: "orange", done: "green"};
+const LABEL = {auto: "driving by itself", stuck: "HELP NEEDED",
+               manual: "operator in control", done: "goal reached"};
+const cards = {};
 const keys = {};
+let controlling = null;
+let lastKey = "";
 
-document.getElementById("take").onclick = () => ws.send(JSON.stringify({type: "takeover"}));
+function getCard(r) {
+  if (cards[r.id]) return cards[r.id];
+  const div = document.createElement("div");
+  div.style.marginBottom = "14px";
+  const title = document.createElement("div");
+  title.style.fontWeight = "bold";
+  const canvas = document.createElement("canvas");
+  canvas.width = 460;
+  canvas.height = 160;
+  canvas.style.border = "1px solid #000";
+  const info = document.createElement("div");
+  info.style.fontSize = "12px";
+  div.append(title, canvas, info);
+  document.getElementById("fleet").appendChild(div);
+  cards[r.id] = {title: title, ctx: canvas.getContext("2d"), info: info};
+  return cards[r.id];
+}
+
+function draw(r) {
+  const c = getCard(r);
+  const ctx = c.ctx;
+  ctx.clearRect(0, 0, 460, 160);
+  ctx.fillStyle = "black";
+  ctx.fillRect(10 + r.wall_x * S - 2, 40, 4, 80);   // wall
+  ctx.fillStyle = "green";
+  ctx.fillRect(10 + 10 * S - 5, 75, 10, 10);        // goal
+  const px = 10 + r.x * S, py = 80 - r.y * S;
+  ctx.fillStyle = COLORS[r.mode];
+  ctx.beginPath();
+  ctx.arc(px, py, 10, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.strokeStyle = "black";
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + 14 * Math.cos(r.theta), py - 14 * Math.sin(r.theta));
+  ctx.stroke();
+  c.title.textContent = r.id + " (" + r.kind + ") - " + LABEL[r.mode];
+  c.info.textContent = "native command: " + JSON.stringify(r.native);
+}
+
+function renderQueue(d) {
+  const key = d.queue.join(",") + "|" + d.controlling;
+  if (key !== lastKey) {            // rebuild only when something changed
+    lastKey = key;
+    const q = document.getElementById("queue");
+    q.innerHTML = "";
+    if (d.queue.length === 0) q.textContent = "Empty";
+    d.queue.forEach(id => {
+      const row = document.createElement("div");
+      row.style.marginBottom = "6px";
+      const label = document.createElement("span");
+      label.id = "wait-" + id;
+      const btn = document.createElement("button");
+      btn.textContent = "Take over";
+      btn.disabled = d.controlling !== null;
+      btn.onclick = () => ws.send(JSON.stringify({type: "takeover", robot: id}));
+      row.append(label, " ", btn);
+      q.appendChild(row);
+    });
+    document.getElementById("ctl").textContent = d.controlling || "Nobody";
+    document.getElementById("back").disabled = d.controlling === null;
+  }
+  d.robots.forEach(r => {
+    const el = document.getElementById("wait-" + r.id);
+    if (el) el.textContent = r.id + " (" + r.kind + ") waiting " + r.waiting + "s";
+  });
+}
+
+ws.onmessage = (e) => {
+  const d = JSON.parse(e.data);
+  controlling = d.controlling;
+  d.robots.forEach(draw);
+  renderQueue(d);
+};
+
 document.getElementById("back").onclick = () => ws.send(JSON.stringify({type: "handback"}));
+document.getElementById("reset").onclick = () => ws.send(JSON.stringify({type: "reset"}));
+
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
   if (e.key.startsWith("Arrow")) e.preventDefault();
@@ -25,40 +113,11 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => { keys[e.key] = false; });
 
 setInterval(() => {
-  if (mode !== "manual") return;
+  if (controlling === null || ws.readyState !== 1) return;
   const v = keys["ArrowUp"] ? 1.5 : keys["ArrowDown"] ? -1.5 : 0;
   const w = keys["ArrowLeft"] ? 1.5 : keys["ArrowRight"] ? -1.5 : 0;
   ws.send(JSON.stringify({type: "cmd", v: v, w: w}));
 }, 50);
-
-const COLORS = {auto: "blue", stuck: "red", manual: "orange", done: "green"};
-const TEXT = {
-  auto: "Driving by itself",
-  stuck: "HELP NEEDED - press Take over",
-  manual: "You are in control (arrow keys)",
-  done: "Goal reached"
-};
-
-ws.onmessage = (e) => {
-  const s = JSON.parse(e.data);
-  mode = s.mode;
-  ctx.clearRect(0, 0, 600, 200);
-  ctx.fillStyle = "black";
-  ctx.fillRect(5 * S + 10, 50, 4, 100);        // wall with gaps above and below
-  ctx.fillStyle = "green";
-  ctx.fillRect(10 * S + 5, 95, 10, 10);        // goal
-  const px = s.x * S + 10, py = 100 - s.y * S;
-  ctx.fillStyle = COLORS[mode];
-  ctx.beginPath();
-  ctx.arc(px, py, 10, 0, 2 * Math.PI);
-  ctx.fill();                                   // robot
-  ctx.strokeStyle = "black";
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + 14 * Math.cos(s.theta), py - 14 * Math.sin(s.theta));
-  ctx.stroke();                                 // heading line
-  status.textContent = TEXT[mode];
-};
 </script>
 </body>
 </html>

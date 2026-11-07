@@ -15,6 +15,8 @@
       <button id="reset">Restart demo</button>
     </p>
     <p>Arrow keys: up/down = forward/back, left/right = turn</p>
+    <h3>Fleet stats</h3>
+    <div id="stats" style="line-height:1.6">...</div>
 
     <h3>Network (simulated)</h3>
     <div>
@@ -123,6 +125,16 @@ function showLatency() {
                    Math.round(avg) + " ms | p95 " + Math.round(p95) + " ms";
 }
 
+function renderStats(st) {
+  document.getElementById("stats").innerHTML =
+    "Takeovers: <b>" + st.takeovers + "</b><br>" +
+    "Interventions per robot-hour: <b>" + st.per_robot_hour + "</b> (simulated time)<br>" +
+    "Time robots drove by themselves: <b>" + st.autonomous_pct + "%</b><br>" +
+    "Operator busy: <b>" + st.operator_busy_pct + "%</b><br>" +
+    "Average wait in queue: <b>" + st.avg_wait + " s</b><br>" +
+    "Robots per operator: <b>" + st.robots + "</b>";
+}
+
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if (d.type === "pong") {
@@ -136,6 +148,7 @@ ws.onmessage = (e) => {
   document.getElementById("netname").textContent = d.net;
   d.robots.forEach(draw);
   renderQueue(d);
+  renderStats(d.stats);
 };
 
 document.getElementById("back").onclick = () => ws.send(JSON.stringify({type: "handback"}));

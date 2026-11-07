@@ -30,6 +30,9 @@ class Unit:
         self.cmd = (0.0, 0.0)       # operator command: (v, w)
         self.last_cmd_at = 0.0
         self.safety_stop = False
+        self.t_auto = 0.0           # simulated seconds spent in each mode
+        self.t_stuck = 0.0
+        self.t_manual = 0.0
 
 
 def make_fleet():
@@ -45,6 +48,7 @@ controlling = None
 clients = set()
 background = set()
 net = {"name": "Good", "delay": 0, "loss": 0.0}   # simulated network
+stats = {"ticks": 0, "op_ticks": 0, "takeovers": 0, "waits": []}
 
 
 def get_unit(uid):
@@ -52,7 +56,16 @@ def get_unit(uid):
 
 
 def tick():
+    stats["ticks"] += 1
+    if controlling is not None:
+        stats["op_ticks"] += 1
     for u in fleet:
+        if u.mode == "auto":
+            u.t_auto += DT
+        elif u.mode == "stuck":
+            u.t_stuck += DT
+        elif u.mode == "manual":
+            u.t_manual += DT
         s = u.robot.get_state()
         stop = u.robot.from_drive(0, 0)
         if u.mode == "auto":
@@ -95,6 +108,7 @@ def handle(msg):
             db.end_takeover(cu.tid, "reset")
         fleet = make_fleet()
         controlling = None
+        stats.update({"ticks": 0, "op_ticks": 0, "takeovers": 0, "waits": []})
     elif kind == "takeover":
         u = get_unit(msg.get("robot"))
         if u and u.mode == "stuck" and controlling is None:
@@ -103,6 +117,8 @@ def handle(msg):
             u.last_cmd_at = time.time()
             u.tid = db.start_takeover(u.id, u.robot.kind)
             controlling = u.id
+            stats["takeovers"] += 1
+            stats["waits"].append(time.time() - u.stuck_since)
     elif kind == "cmd":
         cu = get_unit(controlling) if controlling else None
         if cu:
@@ -122,6 +138,22 @@ def handle(msg):
         net["name"] = msg["name"]
         net["delay"] = msg["delay"]
         net["loss"] = msg["loss"]
+
+
+def make_stats():
+    elapsed = stats["ticks"] * DT
+    robot_hours = len(fleet) * elapsed / 3600
+    t_auto = sum(u.t_auto for u in fleet)
+    t_busy = t_auto + sum(u.t_stuck + u.t_manual for u in fleet)
+    waits = stats["waits"]
+    return {
+        "robots": len(fleet),
+        "takeovers": stats["takeovers"],
+        "per_robot_hour": round(stats["takeovers"] / robot_hours, 1) if robot_hours else 0,
+        "autonomous_pct": round(100 * t_auto / t_busy) if t_busy else 100,
+        "operator_busy_pct": round(100 * stats["op_ticks"] / stats["ticks"]) if stats["ticks"] else 0,
+        "avg_wait": round(sum(waits) / len(waits), 1) if waits else 0,
+    }
 
 
 def snapshot():
@@ -145,6 +177,7 @@ def snapshot():
         "queue": [r["id"] for r in waiting],
         "controlling": controlling,
         "net": net["name"],
+        "stats": make_stats(),
     })
 
 

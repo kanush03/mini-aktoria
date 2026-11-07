@@ -5,7 +5,7 @@
 <h2>Mini Aktoria - Operator Console</h2>
 <div style="display:flex;gap:30px;flex-wrap:wrap">
   <div id="fleet"></div>
-  <div style="min-width:300px">
+  <div style="min-width:320px">
     <h3>Help queue</h3>
     <div id="queue">Empty</div>
     <h3>In control</h3>
@@ -15,6 +15,19 @@
       <button id="reset">Restart demo</button>
     </p>
     <p>Arrow keys: up/down = forward/back, left/right = turn</p>
+
+    <h3>Network (simulated)</h3>
+    <div>
+      <button class="net" data-name="Good" data-delay="0" data-loss="0">Good</button>
+      <button class="net" data-name="Slow" data-delay="200" data-loss="0">Slow 200ms</button>
+      <button class="net" data-name="Bad" data-delay="500" data-loss="0.1">Bad 500ms + 10% loss</button>
+      <button class="net" data-name="Down" data-delay="0" data-loss="1">Down</button>
+    </div>
+    <p>Current: <b id="netname">Good</b></p>
+    <div>Latency (round trip):</div>
+    <div id="lat" style="font-size:18px">measuring...</div>
+    <p style="font-size:12px;color:#444">Delay and loss are simulated on the server. If no
+    command reaches the robot for 0.5 s, it stops by itself.</p>
   </div>
 </div>
 <script>
@@ -25,6 +38,8 @@ const LABEL = {auto: "driving by itself", stuck: "HELP NEEDED",
                manual: "operator in control", done: "goal reached"};
 const cards = {};
 const keys = {};
+const rtts = [];
+let lastPong = 0;
 let controlling = null;
 let lastKey = "";
 
@@ -55,7 +70,7 @@ function draw(r) {
   ctx.fillStyle = "green";
   ctx.fillRect(10 + 10 * S - 5, 75, 10, 10);        // goal
   const px = 10 + r.x * S, py = 80 - r.y * S;
-  ctx.fillStyle = COLORS[r.mode];
+  ctx.fillStyle = r.safety ? "purple" : COLORS[r.mode];
   ctx.beginPath();
   ctx.arc(px, py, 10, 0, 2 * Math.PI);
   ctx.fill();
@@ -64,7 +79,8 @@ function draw(r) {
   ctx.moveTo(px, py);
   ctx.lineTo(px + 14 * Math.cos(r.theta), py - 14 * Math.sin(r.theta));
   ctx.stroke();
-  c.title.textContent = r.id + " (" + r.kind + ") - " + LABEL[r.mode];
+  const text = r.safety ? "SAFETY STOP - no commands arriving" : LABEL[r.mode];
+  c.title.textContent = r.id + " (" + r.kind + ") - " + text;
   c.info.textContent = "native command: " + JSON.stringify(r.native);
 }
 
@@ -96,15 +112,42 @@ function renderQueue(d) {
   });
 }
 
+function showLatency() {
+  const el = document.getElementById("lat");
+  if (rtts.length === 0) { el.textContent = "measuring..."; return; }
+  if (performance.now() - lastPong > 2000) { el.textContent = "no reply (connection lost?)"; return; }
+  const sorted = rtts.slice().sort((a, b) => a - b);
+  const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+  const p95 = sorted[Math.floor(0.95 * (sorted.length - 1))];
+  el.textContent = "last " + Math.round(rtts[rtts.length - 1]) + " ms | avg " +
+                   Math.round(avg) + " ms | p95 " + Math.round(p95) + " ms";
+}
+
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
+  if (d.type === "pong") {
+    rtts.push(performance.now() - d.t);
+    if (rtts.length > 40) rtts.shift();
+    lastPong = performance.now();
+    showLatency();
+    return;
+  }
   controlling = d.controlling;
+  document.getElementById("netname").textContent = d.net;
   d.robots.forEach(draw);
   renderQueue(d);
 };
 
 document.getElementById("back").onclick = () => ws.send(JSON.stringify({type: "handback"}));
 document.getElementById("reset").onclick = () => ws.send(JSON.stringify({type: "reset"}));
+document.querySelectorAll(".net").forEach(b => {
+  b.onclick = () => {
+    rtts.length = 0;                // start fresh latency numbers for the new setting
+    lastPong = performance.now();
+    ws.send(JSON.stringify({type: "net", name: b.dataset.name,
+                            delay: Number(b.dataset.delay), loss: Number(b.dataset.loss)}));
+  };
+});
 
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
@@ -112,12 +155,18 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("keyup", e => { keys[e.key] = false; });
 
-setInterval(() => {
+setInterval(() => {                 // send operator commands 20 times per second
   if (controlling === null || ws.readyState !== 1) return;
   const v = keys["ArrowUp"] ? 1.5 : keys["ArrowDown"] ? -1.5 : 0;
   const w = keys["ArrowLeft"] ? 1.5 : keys["ArrowRight"] ? -1.5 : 0;
   ws.send(JSON.stringify({type: "cmd", v: v, w: w}));
 }, 50);
+
+setInterval(() => {                 // measure latency twice per second
+  if (ws.readyState !== 1) return;
+  ws.send(JSON.stringify({type: "ping", t: performance.now()}));
+  showLatency();
+}, 500);
 </script>
 </body>
 </html>

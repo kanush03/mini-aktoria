@@ -5,7 +5,7 @@ from pathlib import Path
 conn = sqlite3.connect(Path(__file__).parent / "takeovers.db", check_same_thread=False)
 conn.execute("""CREATE TABLE IF NOT EXISTS takeovers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    robot_id TEXT, robot_kind TEXT,
+    robot_id TEXT, robot_kind TEXT, wall_x REAL, wall_half REAL,
     started_at REAL, ended_at REAL, outcome TEXT)""")
 conn.execute("""CREATE TABLE IF NOT EXISTS steps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,10 +14,11 @@ conn.execute("""CREATE TABLE IF NOT EXISTS steps (
 conn.commit()
 
 
-def start_takeover(robot_id, robot_kind):
+def start_takeover(robot_id, robot_kind, wall_x, wall_half):
     cur = conn.execute(
-        "INSERT INTO takeovers (robot_id, robot_kind, started_at) VALUES (?,?,?)",
-        (robot_id, robot_kind, time.time()))
+        "INSERT INTO takeovers (robot_id, robot_kind, wall_x, wall_half, started_at) "
+        "VALUES (?,?,?,?,?)",
+        (robot_id, robot_kind, wall_x, wall_half, time.time()))
     conn.commit()
     return cur.lastrowid
 

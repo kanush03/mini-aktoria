@@ -35,11 +35,18 @@ class Unit:
         self.t_manual = 0.0
 
 
+def random_world(robot):
+    """Every run, each robot gets a wall at a slightly different place and size."""
+    robot.wall_x = round(random.uniform(3.5, 6.5), 2)
+    robot.wall_half = round(random.uniform(0.8, 1.4), 2)
+    return robot
+
+
 def make_fleet():
     return [
-        Unit("R1", WheeledRobot(wall_x=5.0)),
-        Unit("R2", DiffDriveRobot(wall_x=4.0)),
-        Unit("R3", WheeledRobot(wall_x=6.0)),
+        Unit("R1", random_world(WheeledRobot())),
+        Unit("R2", random_world(DiffDriveRobot())),
+        Unit("R3", random_world(WheeledRobot())),
     ]
 
 
@@ -115,7 +122,7 @@ def handle(msg):
             u.mode = "manual"
             u.cmd = (0.0, 0.0)
             u.last_cmd_at = time.time()
-            u.tid = db.start_takeover(u.id, u.robot.kind)
+            u.tid = db.start_takeover(u.id, u.robot.kind, u.robot.wall_x, u.robot.wall_half)
             controlling = u.id
             stats["takeovers"] += 1
             stats["waits"].append(time.time() - u.stuck_since)
@@ -164,6 +171,7 @@ def snapshot():
             "id": u.id,
             "kind": u.robot.kind,
             "wall_x": u.robot.wall_x,
+            "wall_half": u.robot.wall_half,
             **u.robot.get_state(),
             "mode": u.mode,
             "safety": u.safety_stop,

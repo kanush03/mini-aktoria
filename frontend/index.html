@@ -68,7 +68,7 @@ function draw(r) {
   const ctx = c.ctx;
   ctx.clearRect(0, 0, 460, 160);
   ctx.fillStyle = "black";
-  ctx.fillRect(10 + r.wall_x * S - 2, 40, 4, 80);   // wall
+  ctx.fillRect(10 + r.wall_x * S - 2, 80 - r.wall_half * S, 4, 2 * r.wall_half * S);   // wall
   ctx.fillStyle = "green";
   ctx.fillRect(10 + 10 * S - 5, 75, 10, 10);        // goal
   const px = 10 + r.x * S, py = 80 - r.y * S;

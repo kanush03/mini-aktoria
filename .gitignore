@@ -219,3 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 *.db
+# Mini Aktoria
+episodes.jsonl
+backend/takeovers.db
+.pytest_cache/

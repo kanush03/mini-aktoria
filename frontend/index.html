@@ -1,140 +1,501 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Mini Aktoria</title></head>
-<body style="font-family:sans-serif">
-<h2>Mini Aktoria - Operator Console</h2>
-<div style="display:flex;gap:30px;flex-wrap:wrap">
-  <div id="fleet"></div>
-  <div style="min-width:320px">
-    <h3>Help queue</h3>
-    <div id="queue">Empty</div>
-    <h3>In control</h3>
-    <div id="ctl">Nobody</div>
-    <p>
-      <button id="back" disabled>Hand back</button>
-      <button id="reset">Restart demo</button>
-    </p>
-    <p>Arrow keys: up/down = forward/back, left/right = turn</p>
-    <h3>Fleet stats</h3>
-    <div id="stats" style="line-height:1.6">...</div>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Aktoria - Operator Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230f766e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%232dd4bf'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0a0f1d;
+    --panel: #111a2e;
+    --panel-2: #0d1526;
+    --border: #1e2b47;
+    --text: #e6edf7;
+    --muted: #8ea3c2;
+    --auto: #38bdf8;
+    --assist: #a78bfa;
+    --stuck: #f87171;
+    --manual: #fbbf24;
+    --done: #4ade80;
+    --safety: #f472b6;
+    --accent: #2dd4bf;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 600px at 20% -10%, #14213d 0%, var(--bg) 60%);
+    color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 16px 28px;
+    border-bottom: 1px solid var(--border); background: rgba(10, 15, 29, 0.7);
+    backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 5;
+  }
+  .logo { width: 34px; height: 34px; border-radius: 50%; background: #0f766e; display: grid; place-items: center; }
+  .logo i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); display: block; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: 0.2px; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+    font-size: 12.5px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .pill.ok .dot { background: var(--done); box-shadow: 0 0 8px var(--done); }
+  .pill.bad .dot { background: var(--stuck); }
 
-    <h3>Network (simulated)</h3>
-    <div>
-      <button class="net" data-name="Good" data-delay="0" data-loss="0">Good</button>
-      <button class="net" data-name="Slow" data-delay="200" data-loss="0">Slow 200ms</button>
-      <button class="net" data-name="Bad" data-delay="500" data-loss="0.1">Bad 500ms + 10% loss</button>
-      <button class="net" data-name="Down" data-delay="0" data-loss="1">Down</button>
-    </div>
-    <p>Current: <b id="netname">Good</b></p>
-    <div>Latency (round trip):</div>
-    <div id="lat" style="font-size:18px">measuring...</div>
-    <p style="font-size:12px;color:#444">Delay and loss are simulated on the server. If no
-    command reaches the robot for 0.5 s, it stops by itself.</p>
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 22px; padding: 22px 28px 40px; max-width: 1640px; margin: 0 auto; }
+  @media (max-width: 1060px) { main { grid-template-columns: 1fr; } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 18px; }
+  .fleet { display: grid; gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px 12px; transition: border-color .2s, box-shadow .2s; }
+  .card.stuck { border-color: rgba(248, 113, 113, .6); box-shadow: 0 0 0 1px rgba(248, 113, 113, .25); }
+  .card.manual { border-color: rgba(251, 191, 36, .6); }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .card-head .name { font-weight: 700; font-size: 16px; }
+  .badge { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+  canvas { width: 100%; display: block; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); }
+  .card-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 9px; font-size: 12px; color: var(--muted); }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  button {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border);
+    padding: 8px 13px; border-radius: 9px; cursor: pointer; transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { background: #17233e; border-color: #2c3f66; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #0f766e; border-color: #14b8a6; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #0d8a80; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row.between { justify-content: space-between; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .queue-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); margin-bottom: 8px; }
+  .queue-item .who { font-size: 13px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+  .control-box { margin-top: 12px; padding: 12px; border-radius: 10px; border: 1px dashed var(--border); }
+  .control-box.active { border: 1px solid rgba(251, 191, 36, .6); background: rgba(251, 191, 36, .06); }
+  .keys { display: grid; grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(2, 38px); gap: 5px; justify-content: center; margin-top: 10px; }
+  .key { display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-size: 15px; transition: all .08s; }
+  .key.on { background: var(--manual); color: #1b1300; border-color: var(--manual); transform: translateY(1px); }
+  .key.up { grid-column: 2; grid-row: 1; } .key.left { grid-column: 1; grid-row: 2; } .key.down { grid-column: 2; grid-row: 2; } .key.right { grid-column: 3; grid-row: 2; }
+
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; transition: .2s; }
+  .slider::before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px; background: var(--muted); border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: rgba(167, 139, 250, .25); border-color: var(--assist); }
+  .switch input:checked + .slider::before { transform: translateX(20px); background: var(--assist); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; }
+  .stat b { display: block; font-size: 21px; font-weight: 700; margin-bottom: 3px; }
+  .stat span { font-size: 11.5px; color: var(--muted); line-height: 1.25; display: block; }
+
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .seg button { padding: 8px 4px; font-size: 12px; }
+  .seg button.on { background: rgba(45, 212, 191, .15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .latency { margin-top: 12px; }
+  .latency .big { font-size: 24px; font-weight: 700; }
+
+  .feed { max-height: 190px; overflow-y: auto; }
+  .ev { font-size: 12.5px; padding: 6px 0 6px 10px; border-left: 3px solid var(--border); margin-bottom: 5px; }
+  .ev .t { color: var(--muted); margin-right: 7px; }
+  .ev.warn { border-left-color: var(--stuck); } .ev.ok { border-left-color: var(--done); } .ev.learn { border-left-color: var(--assist); }
+
+  .chart-box { margin-top: 12px; }
+  svg text { fill: var(--muted); font-size: 10.5px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 20px 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i></div>
+  <div>
+    <h1>Mini Aktoria</h1>
+    <div class="sub">Remote robot operation with human takeover (simulation)</div>
   </div>
-</div>
+  <div class="spacer"></div>
+  <span class="pill" id="conn"><span class="dot"></span><span id="conn-text">Connecting...</span></span>
+</header>
+
+<main>
+  <section>
+    <h2>Fleet</h2>
+    <div class="fleet" id="fleet"></div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h2>Help queue</h2>
+      <div id="queue"><div class="empty">No robot needs help.</div></div>
+      <div class="control-box" id="controlbox">
+        <div class="row between">
+          <div>In control: <b id="ctl">nobody</b></div>
+          <div class="row">
+            <button id="back" class="primary" disabled>Hand back</button>
+            <button id="reset" title="New random walls, fresh statistics">Restart demo</button>
+          </div>
+        </div>
+        <div class="keys" aria-label="Arrow keys">
+          <div class="key up" data-key="ArrowUp">&#8593;</div>
+          <div class="key left" data-key="ArrowLeft">&#8592;</div>
+          <div class="key down" data-key="ArrowDown">&#8595;</div>
+          <div class="key right" data-key="ArrowRight">&#8594;</div>
+        </div>
+        <div class="small muted" style="text-align:center;margin-top:8px">Take over a stuck robot, then steer with the arrow keys</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Learning from takeovers</h2>
+      <div class="row between">
+        <div>
+          <div style="font-weight:600">Learned assist</div>
+          <div class="small muted">A stuck robot first tries what the operators taught it. A human is asked only if that fails.</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="assist"><span class="slider"></span></label>
+      </div>
+      <div class="row between" style="margin-top:12px">
+        <div class="small muted" id="model">No model loaded</div>
+        <button id="learn" title="Train on the takeovers you did (needs at least 3)">Learn from my takeovers</button>
+      </div>
+      <div class="chart-box" id="chart"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Fleet stats</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Network (simulated)</h2>
+      <div class="seg">
+        <button class="net" data-name="Good" data-delay="0" data-loss="0">Good</button>
+        <button class="net" data-name="Slow" data-delay="200" data-loss="0">Slow<br>200 ms</button>
+        <button class="net" data-name="Bad" data-delay="500" data-loss="0.1">Bad<br>500 ms, 10% loss</button>
+        <button class="net" data-name="Down" data-delay="0" data-loss="1">Down</button>
+      </div>
+      <div class="latency">
+        <div class="small muted">Round-trip latency</div>
+        <div class="big mono" id="lat-big">...</div>
+        <div class="small muted mono" id="lat-small">measuring</div>
+      </div>
+      <div class="small muted" style="margin-top:10px">Delay and loss are simulated on the server. If no command reaches a robot for 0.5 s, it stops by itself.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Activity</h2>
+      <div class="feed" id="feed"></div>
+    </div>
+  </aside>
+</main>
+<footer>Independent student project. Everything runs in simulation on one machine.</footer>
+
 <script>
-const S = 40;
-const ws = new WebSocket("ws://" + location.host + "/ws");
-const COLORS = {auto: "blue", stuck: "red", manual: "orange", done: "green"};
-const LABEL = {auto: "driving by itself", stuck: "HELP NEEDED",
-               manual: "operator in control", done: "goal reached"};
+"use strict";
+const COLORS = {auto: "#38bdf8", assist: "#a78bfa", stuck: "#f87171", manual: "#fbbf24", done: "#4ade80"};
+const SAFETY_COLOR = "#f472b6";
+const LABEL = {auto: "Driving by itself", assist: "Trying learned policy", stuck: "Needs help",
+               manual: "Operator in control", done: "Goal reached"};
+const GOAL_X = 10, X_MIN = -0.6, X_MAX = 10.8, Y_HALF = 2.3;
+
+const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+const $ = (id) => document.getElementById(id);
 const cards = {};
+const trails = {};
 const keys = {};
 const rtts = [];
 let lastPong = 0;
 let controlling = null;
-let lastKey = "";
+let queueKey = "";
+let lastEventId = 0;
+let netName = "";
 
+/* ---------- connection ---------- */
+ws.onopen = () => { $("conn").className = "pill ok"; $("conn-text").textContent = "Connected"; };
+ws.onclose = () => { $("conn").className = "pill bad"; $("conn-text").textContent = "Disconnected: restart the server and refresh"; };
+
+/* ---------- fleet cards ---------- */
 function getCard(r) {
   if (cards[r.id]) return cards[r.id];
-  const div = document.createElement("div");
-  div.style.marginBottom = "14px";
-  const title = document.createElement("div");
-  title.style.fontWeight = "bold";
-  const canvas = document.createElement("canvas");
-  canvas.width = 460;
-  canvas.height = 160;
-  canvas.style.border = "1px solid #000";
-  const info = document.createElement("div");
-  info.style.fontSize = "12px";
-  div.append(title, canvas, info);
-  document.getElementById("fleet").appendChild(div);
-  cards[r.id] = {title: title, ctx: canvas.getContext("2d"), info: info};
-  return cards[r.id];
+  const el = document.createElement("div");
+  el.className = "card";
+  el.innerHTML =
+    '<div class="card-head"><span class="name"></span><span class="badge"></span><span class="spacer"></span>' +
+    '<span class="status"><span class="dot"></span><span class="label"></span></span></div>' +
+    '<canvas></canvas>' +
+    '<div class="card-foot"><span class="native mono"></span><span class="extra"></span></div>';
+  $("fleet").appendChild(el);
+  const c = {
+    el: el, canvas: el.querySelector("canvas"), name: el.querySelector(".name"),
+    badge: el.querySelector(".badge"), dot: el.querySelector(".status .dot"),
+    label: el.querySelector(".label"), native: el.querySelector(".native"), extra: el.querySelector(".extra"),
+  };
+  c.name.textContent = r.id;
+  c.badge.textContent = r.kind;
+  cards[r.id] = c;
+  return c;
+}
+
+function fitCanvas(c) {
+  const w = c.canvas.clientWidth || 600;
+  const h = Math.round(w * (2 * Y_HALF) / (X_MAX - X_MIN));
+  const dpr = window.devicePixelRatio || 1;
+  if (c.canvas.width !== Math.round(w * dpr) || c.canvas.height !== Math.round(h * dpr)) {
+    c.canvas.width = Math.round(w * dpr);
+    c.canvas.height = Math.round(h * dpr);
+    c.canvas.style.height = h + "px";
+  }
+  return {w: w, h: h, dpr: dpr, s: w / (X_MAX - X_MIN)};
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function draw(r) {
   const c = getCard(r);
-  const ctx = c.ctx;
-  ctx.clearRect(0, 0, 460, 160);
-  ctx.fillStyle = "black";
-  ctx.fillRect(10 + r.wall_x * S - 2, 80 - r.wall_half * S, 4, 2 * r.wall_half * S);   // wall
-  ctx.fillStyle = "green";
-  ctx.fillRect(10 + 10 * S - 5, 75, 10, 10);        // goal
-  const px = 10 + r.x * S, py = 80 - r.y * S;
-  ctx.fillStyle = r.safety ? "purple" : COLORS[r.mode];
+  const g = fitCanvas(c);
+  const ctx = c.canvas.getContext("2d");
+  const s = g.s;
+  const X = (x) => (x - X_MIN) * s;
+  const Y = (y) => g.h / 2 - y * s;
+  ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  ctx.clearRect(0, 0, g.w, g.h);
+
+  // grid
+  ctx.strokeStyle = "rgba(142,163,194,0.10)";
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(px, py, 10, 0, 2 * Math.PI);
-  ctx.fill();
-  ctx.strokeStyle = "black";
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + 14 * Math.cos(r.theta), py - 14 * Math.sin(r.theta));
+  for (let gx = 0; gx <= 10; gx++) { ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), g.h); }
+  for (let gy = -2; gy <= 2; gy++) { ctx.moveTo(0, Y(gy)); ctx.lineTo(g.w, Y(gy)); }
   ctx.stroke();
-  const text = r.safety ? "SAFETY STOP - no commands arriving" : LABEL[r.mode];
-  c.title.textContent = r.id + " (" + r.kind + ") - " + text;
-  c.info.textContent = "native command: " + JSON.stringify(r.native);
+
+  // start line and goal
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = "rgba(142,163,194,0.45)";
+  ctx.beginPath(); ctx.moveTo(X(0), 8); ctx.lineTo(X(0), g.h - 8); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(142,163,194,0.7)";
+  ctx.font = "11px sans-serif";
+  ctx.fillText("START", X(0) + 5, 16);
+  ctx.strokeStyle = COLORS.done; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(X(GOAL_X), Y(0), 0.3 * s, 0, 2 * Math.PI); ctx.stroke();
+  ctx.fillStyle = COLORS.done;
+  ctx.beginPath(); ctx.arc(X(GOAL_X), Y(0), 0.1 * s, 0, 2 * Math.PI); ctx.fill();
+  ctx.fillText("GOAL", X(GOAL_X) - 16, Y(0) - 0.45 * s);
+
+  // wall: only blocks between -half and +half, the robot can drive around it
+  const wx = X(r.wall_x), top = Y(r.wall_half), hgt = 2 * r.wall_half * s;
+  ctx.fillStyle = "#1a2540";
+  ctx.strokeStyle = "#5b6f96";
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, wx - 5, top, 10, hgt, 3);
+  ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "rgba(91,111,150,0.7)";
+  ctx.beginPath();
+  for (let yy = top + 6; yy < top + hgt - 2; yy += 9) { ctx.moveTo(wx - 5, yy + 5); ctx.lineTo(wx + 5, yy - 3); }
+  ctx.stroke();
+
+  // trail
+  const col = r.safety ? SAFETY_COLOR : COLORS[r.mode];
+  const tr = trails[r.id] = trails[r.id] || [];
+  if (tr.length && r.x < tr[tr.length - 1][0] - 1) tr.length = 0;      // demo restarted
+  tr.push([r.x, r.y]);
+  if (tr.length > 90) tr.shift();
+  if (tr.length > 1) {
+    ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    for (let i = 1; i < tr.length; i++) {
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = 0.05 + 0.4 * (i / tr.length);
+      ctx.beginPath(); ctx.moveTo(X(tr[i - 1][0]), Y(tr[i - 1][1])); ctx.lineTo(X(tr[i][0]), Y(tr[i][1])); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // robot
+  const px = X(r.x), py = Y(r.y);
+  if (r.mode === "stuck") {                                              // pulsing alert ring
+    const p = (performance.now() % 1200) / 1200;
+    ctx.strokeStyle = COLORS.stuck; ctx.globalAlpha = 1 - p; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px, py, (0.28 + 0.5 * p) * s, 0, 2 * Math.PI); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(-r.theta);
+  const L = 0.62 * s, W = 0.42 * s;
+  if (r.kind === "diff-drive") {                                         // two side wheels
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(-L * 0.35, -W / 2 - 3, L * 0.7, 4);
+    ctx.fillRect(-L * 0.35, W / 2 - 1, L * 0.7, 4);
+  }
+  ctx.fillStyle = col;
+  roundRect(ctx, -L / 2, -W / 2, L, W, 5);
+  ctx.fill();
+  ctx.fillStyle = "#0a0f1d";                                             // heading arrow
+  ctx.beginPath();
+  ctx.moveTo(L / 2 - 2, 0); ctx.lineTo(L / 2 - 10, -5); ctx.lineTo(L / 2 - 10, 5);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // card text
+  c.el.className = "card " + (r.mode === "stuck" ? "stuck" : r.mode === "manual" ? "manual" : "");
+  c.dot.style.background = col;
+  c.label.textContent = r.safety ? "Safety stop: no commands arriving" : LABEL[r.mode];
+  c.label.style.color = col;
+  c.native.textContent = "native command " + JSON.stringify(r.native);
+  c.extra.textContent = r.mode === "stuck" && r.waiting !== null ? "waiting " + r.waiting + " s" :
+                        "wall at " + r.wall_x + ", height " + (2 * r.wall_half).toFixed(1);
 }
 
+/* ---------- help queue and operator box ---------- */
 function renderQueue(d) {
   const key = d.queue.join(",") + "|" + d.controlling;
-  if (key !== lastKey) {            // rebuild only when something changed
-    lastKey = key;
-    const q = document.getElementById("queue");
+  if (key !== queueKey) {                       // rebuild only when something changed, so clicks are not lost
+    queueKey = key;
+    const q = $("queue");
     q.innerHTML = "";
-    if (d.queue.length === 0) q.textContent = "Empty";
-    d.queue.forEach(id => {
+    if (d.queue.length === 0) {
+      q.innerHTML = '<div class="empty">No robot needs help.</div>';
+    }
+    d.queue.forEach((id) => {
+      const robot = d.robots.find((r) => r.id === id);
       const row = document.createElement("div");
-      row.style.marginBottom = "6px";
-      const label = document.createElement("span");
-      label.id = "wait-" + id;
+      row.className = "queue-item";
+      const who = document.createElement("div");
+      who.className = "who";
+      who.innerHTML = '<b>' + id + '</b> <span class="muted">' + robot.kind + '</span><br>' +
+                      '<span class="small muted" id="wait-' + id + '"></span>';
       const btn = document.createElement("button");
+      btn.className = "primary";
       btn.textContent = "Take over";
       btn.disabled = d.controlling !== null;
       btn.onclick = () => ws.send(JSON.stringify({type: "takeover", robot: id}));
-      row.append(label, " ", btn);
+      row.append(who, btn);
       q.appendChild(row);
     });
-    document.getElementById("ctl").textContent = d.controlling || "Nobody";
-    document.getElementById("back").disabled = d.controlling === null;
+    $("ctl").textContent = d.controlling || "nobody";
+    $("controlbox").className = "control-box" + (d.controlling ? " active" : "");
+    $("back").disabled = d.controlling === null;
   }
-  d.robots.forEach(r => {
-    const el = document.getElementById("wait-" + r.id);
-    if (el) el.textContent = r.id + " (" + r.kind + ") waiting " + r.waiting + "s";
+  d.robots.forEach((r) => {
+    const el = $("wait-" + r.id);
+    if (el) el.textContent = "waiting " + r.waiting + " s";
   });
 }
 
+/* ---------- stats ---------- */
+function renderStats(st) {
+  const items = [
+    [st.takeovers, "human takeovers"],
+    [st.recoveries, "solved by learned policy"],
+    [st.per_robot_hour, "human interventions per robot-hour"],
+    [st.autonomous_pct + "%", "time robots needed no human"],
+    [st.operator_busy_pct + "%", "operator busy"],
+    [st.avg_wait + " s", "average wait in queue"],
+  ];
+  const box = $("stats");
+  if (box.children.length !== items.length) {
+    box.innerHTML = items.map(() => "<div class='stat'><b></b><span></span></div>").join("");
+  }
+  items.forEach((it, i) => {
+    box.children[i].querySelector("b").textContent = it[0];
+    box.children[i].querySelector("span").textContent = it[1];
+  });
+}
+
+/* ---------- learning panel ---------- */
+function renderLearning(d) {
+  const cb = $("assist");
+  if (document.activeElement !== cb) cb.checked = d.assist;
+  $("model").textContent = d.model
+    ? "Model: " + d.model.demos + " takeovers from " + d.model.source
+    : "No model loaded";
+}
+
+async function loadChart() {
+  try {
+    const res = await fetch("/api/learning");
+    const data = await res.json();
+    if (!data.curve || !data.curve.length) { return; }
+    const c = data.curve;
+    const W = 360, H = 150, L = 34, R = 10, T = 10, B = 28;
+    const px = (i) => L + (W - L - R) * i / (c.length - 1);
+    const py = (v) => T + (H - T - B) * (1 - v / 100);
+    const band = c.map((p, i) => px(i) + "," + py(p.solved_max)).join(" ") + " " +
+                 c.slice().reverse().map((p, i) => px(c.length - 1 - i) + "," + py(p.solved_min)).join(" ");
+    const line = c.map((p, i) => px(i) + "," + py(p.solved_mean)).join(" ");
+    let grid = "";
+    [0, 50, 100].forEach((v) => {
+      grid += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + py(v) + '" y2="' + py(v) + '" stroke="#1e2b47"/>' +
+              '<text x="' + (L - 6) + '" y="' + (py(v) + 3) + '" text-anchor="end">' + v + '%</text>';
+    });
+    let xs = "";
+    c.forEach((p, i) => {
+      xs += '<text x="' + px(i) + '" y="' + (H - 12) + '" text-anchor="middle">' + p.demos + '</text>';
+    });
+    const dots = c.map((p, i) => '<circle cx="' + px(i) + '" cy="' + py(p.solved_mean) + '" r="3" fill="#2dd4bf"/>').join("");
+    $("chart").innerHTML =
+      '<div class="small muted" style="margin-bottom:4px">Stuck robots solved without a human, by number of takeovers learned from</div>' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%">' + grid +
+      '<polygon points="' + band + '" fill="#2dd4bf" opacity="0.16"/>' +
+      '<polyline points="' + line + '" fill="none" stroke="#2dd4bf" stroke-width="2"/>' + dots + xs +
+      '<text x="' + ((L + W - R) / 2) + '" y="' + (H - 1) + '" text-anchor="middle">takeovers used for training</text></svg>' +
+      '<div class="small muted">Offline test on ' + data.meta.worlds_per_test + ' unseen random worlds. Demonstrations from a scripted operator (see README).</div>';
+  } catch (e) { /* chart is optional */ }
+}
+
+/* ---------- network and latency ---------- */
 function showLatency() {
-  const el = document.getElementById("lat");
-  if (rtts.length === 0) { el.textContent = "measuring..."; return; }
-  if (performance.now() - lastPong > 2000) { el.textContent = "no reply (connection lost?)"; return; }
+  const big = $("lat-big"), small = $("lat-small");
+  if (rtts.length === 0) { big.textContent = "..."; small.textContent = "measuring"; return; }
+  if (performance.now() - lastPong > 2000) { big.textContent = "no reply"; small.textContent = "connection lost?"; return; }
   const sorted = rtts.slice().sort((a, b) => a - b);
   const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
   const p95 = sorted[Math.floor(0.95 * (sorted.length - 1))];
-  el.textContent = "last " + Math.round(rtts[rtts.length - 1]) + " ms | avg " +
-                   Math.round(avg) + " ms | p95 " + Math.round(p95) + " ms";
+  big.textContent = Math.round(avg) + " ms avg";
+  small.textContent = "last " + Math.round(rtts[rtts.length - 1]) + " ms, p95 " + Math.round(p95) + " ms";
 }
 
-function renderStats(st) {
-  document.getElementById("stats").innerHTML =
-    "Takeovers: <b>" + st.takeovers + "</b><br>" +
-    "Interventions per robot-hour: <b>" + st.per_robot_hour + "</b> (simulated time)<br>" +
-    "Time robots drove by themselves: <b>" + st.autonomous_pct + "%</b><br>" +
-    "Operator busy: <b>" + st.operator_busy_pct + "%</b><br>" +
-    "Average wait in queue: <b>" + st.avg_wait + " s</b><br>" +
-    "Robots per operator: <b>" + st.robots + "</b>";
+function renderNet(name) {
+  if (name === netName) return;
+  netName = name;
+  document.querySelectorAll(".net").forEach((b) => b.classList.toggle("on", b.dataset.name === name));
 }
 
+/* ---------- activity feed ---------- */
+function renderFeed(events) {
+  if (!events.length || events[events.length - 1].id === lastEventId) return;
+  lastEventId = events[events.length - 1].id;
+  const feed = $("feed");
+  feed.innerHTML = "";
+  events.slice().reverse().forEach((e) => {
+    const div = document.createElement("div");
+    div.className = "ev " + e.kind;
+    const t = document.createElement("span");
+    t.className = "t mono";
+    t.textContent = e.t;
+    div.append(t, document.createTextNode(e.text));
+    feed.appendChild(div);
+  });
+}
+
+/* ---------- messages from the server ---------- */
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if (d.type === "pong") {
@@ -145,41 +506,51 @@ ws.onmessage = (e) => {
     return;
   }
   controlling = d.controlling;
-  document.getElementById("netname").textContent = d.net;
   d.robots.forEach(draw);
   renderQueue(d);
   renderStats(d.stats);
+  renderLearning(d);
+  renderNet(d.net);
+  renderFeed(d.events);
 };
 
-document.getElementById("back").onclick = () => ws.send(JSON.stringify({type: "handback"}));
-document.getElementById("reset").onclick = () => ws.send(JSON.stringify({type: "reset"}));
-document.querySelectorAll(".net").forEach(b => {
+/* ---------- buttons and keyboard ---------- */
+const send = (obj) => { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); };
+$("back").onclick = () => send({type: "handback"});
+$("reset").onclick = () => send({type: "reset"});
+$("learn").onclick = () => send({type: "learn"});
+$("assist").onchange = (e) => send({type: "assist", on: e.target.checked});
+document.querySelectorAll(".net").forEach((b) => {
   b.onclick = () => {
-    rtts.length = 0;                // start fresh latency numbers for the new setting
+    rtts.length = 0;                                   // fresh latency numbers for the new setting
     lastPong = performance.now();
-    ws.send(JSON.stringify({type: "net", name: b.dataset.name,
-                            delay: Number(b.dataset.delay), loss: Number(b.dataset.loss)}));
+    send({type: "net", name: b.dataset.name, delay: Number(b.dataset.delay), loss: Number(b.dataset.loss)});
   };
 });
 
-document.addEventListener("keydown", e => {
+function markKeys() {
+  document.querySelectorAll(".key").forEach((k) => k.classList.toggle("on", !!keys[k.dataset.key]));
+}
+document.addEventListener("keydown", (e) => {
   keys[e.key] = true;
   if (e.key.startsWith("Arrow")) e.preventDefault();
+  markKeys();
 });
-document.addEventListener("keyup", e => { keys[e.key] = false; });
+document.addEventListener("keyup", (e) => { keys[e.key] = false; markKeys(); });
 
-setInterval(() => {                 // send operator commands 20 times per second
-  if (controlling === null || ws.readyState !== 1) return;
+setInterval(() => {                                    // operator commands, 20 per second
+  if (controlling === null) return;
   const v = keys["ArrowUp"] ? 1.5 : keys["ArrowDown"] ? -1.5 : 0;
   const w = keys["ArrowLeft"] ? 1.5 : keys["ArrowRight"] ? -1.5 : 0;
-  ws.send(JSON.stringify({type: "cmd", v: v, w: w}));
+  send({type: "cmd", v: v, w: w});
 }, 50);
 
-setInterval(() => {                 // measure latency twice per second
-  if (ws.readyState !== 1) return;
-  ws.send(JSON.stringify({type: "ping", t: performance.now()}));
+setInterval(() => {                                    // latency probe, twice per second
+  send({type: "ping", t: performance.now()});
   showLatency();
 }, 500);
+
+loadChart();
 </script>
 </body>
 </html>

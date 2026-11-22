@@ -1,0 +1,85 @@
+{
+ "meta": {
+  "worlds_per_test": 60,
+  "subsets_per_size": 30,
+  "demo_pool": 60,
+  "operator": "scripted operator (not a human), see scripted_operator.py",
+  "policy": "k-nearest-neighbours behaviour cloning, k=9",
+  "success": "robot gets past the wall with the learned policy and the autopilot then reaches the goal",
+  "assumption": "a human takeover costs the scripted operator's time; the learned policy gets 12 s"
+ },
+ "curve": [
+  {
+   "demos": 0,
+   "solved_mean": 0.0,
+   "solved_min": 0.0,
+   "solved_max": 0.0,
+   "solved_p10": 0.0,
+   "interventions_per_robot_hour": 251.8,
+   "reduction_pct": 0.0
+  },
+  {
+   "demos": 1,
+   "solved_mean": 69.9,
+   "solved_min": 41.7,
+   "solved_max": 100.0,
+   "solved_p10": 50.0,
+   "interventions_per_robot_hour": 55.2,
+   "reduction_pct": 78.1
+  },
+  {
+   "demos": 2,
+   "solved_mean": 89.4,
+   "solved_min": 36.7,
+   "solved_max": 100.0,
+   "solved_p10": 57.2,
+   "interventions_per_robot_hour": 19.3,
+   "reduction_pct": 92.3
+  },
+  {
+   "demos": 3,
+   "solved_mean": 93.0,
+   "solved_min": 58.3,
+   "solved_max": 100.0,
+   "solved_p10": 67.5,
+   "interventions_per_robot_hour": 13.1,
+   "reduction_pct": 94.8
+  },
+  {
+   "demos": 5,
+   "solved_mean": 98.5,
+   "solved_min": 78.3,
+   "solved_max": 100.0,
+   "solved_p10": 96.0,
+   "interventions_per_robot_hour": 3.1,
+   "reduction_pct": 98.8
+  },
+  {
+   "demos": 8,
+   "solved_mean": 99.3,
+   "solved_min": 88.3,
+   "solved_max": 100.0,
+   "solved_p10": 100.0,
+   "interventions_per_robot_hour": 1.6,
+   "reduction_pct": 99.4
+  },
+  {
+   "demos": 12,
+   "solved_mean": 100.0,
+   "solved_min": 100.0,
+   "solved_max": 100.0,
+   "solved_p10": 100.0,
+   "interventions_per_robot_hour": 0.0,
+   "reduction_pct": 100.0
+  },
+  {
+   "demos": 20,
+   "solved_mean": 100.0,
+   "solved_min": 100.0,
+   "solved_max": 100.0,
+   "solved_p10": 100.0,
+   "interventions_per_robot_hour": 0.0,
+   "reduction_pct": 100.0
+  }
+ ]
+}
